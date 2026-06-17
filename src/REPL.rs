@@ -45,7 +45,6 @@ Notes
     The loop should run indefinitely. The tester will terminate your program when the test is complete.
 */
 
-mod repl;
 pub fn repl() {
     // main event loop
     loop {
