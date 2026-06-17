@@ -45,6 +45,8 @@ Notes
     The loop should run indefinitely. The tester will terminate your program when the test is complete.
 */
 
+use std::io::Write;
+
 pub fn repl() {
     // main event loop
     loop {
