@@ -1,7 +1,6 @@
 #[allow(unused_imports)]
 use std::io::{self, Write};
-use repl::repl;
+mod repl;
 fn main() {
-    // call the main REPL function
-    repl();
+    repl::repl();
 }
