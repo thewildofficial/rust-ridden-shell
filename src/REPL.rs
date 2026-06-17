@@ -44,7 +44,9 @@ Notes
     The exact number of commands sent and the command names will be random.
     The loop should run indefinitely. The tester will terminate your program when the test is complete.
 */
-fn repl() {
+
+mod repl;
+pub fn repl() {
     // main event loop
     loop {
         // print the prompt
