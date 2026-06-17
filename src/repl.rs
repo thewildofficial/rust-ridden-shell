@@ -20,10 +20,15 @@ pub fn repl() {
         let cmd = &parts[0];
         let args = &parts[1..];
 
-        match cmd.as_str() {
-            "exit" => crate::builtin::exit(args),
-            "echo" => crate::builtin::echo(args),
-            _ => println!("{}: command not found", trimmed),
+        if crate::builtin::is_builtin(cmd) {
+            match cmd.as_str() {
+                "exit" => crate::builtin::exit(args),
+                "echo" => crate::builtin::echo(args),
+                "type" => crate::builtin::type_cmd(args),
+                _ => unreachable!(),
+            }
+        } else {
+            println!("{}: command not found", trimmed);
         }
     }
 }
