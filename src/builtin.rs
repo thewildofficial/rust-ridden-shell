@@ -1,16 +1,11 @@
-// a single file with all the builtins. each builtin is a function. you add a new one by writing a function and adding it to a match statement. clean, flat, easy.
-
-
- /* The exit Builtin
-
-The exit builtin terminates the shell. Builtin commands are handled directly by the shell without starting a new process.
-
-When your shell receives the exit command, it should terminate immediately.
- */
-
-pub fn exit(code: i32) {
-    // take the exit code, default to 0 if not provided
-    let code = code.max(0);
-    
+pub fn exit(args: &[String]) {
+    let code = args.first()
+        .and_then(|s| s.parse::<i32>().ok())
+        .unwrap_or(0);
     std::process::exit(code);
+}
+
+pub fn echo(args: &[String]) {
+    // args already has the command name stripped, so just join and print
+    println!("{}", args.join(" "));
 }
