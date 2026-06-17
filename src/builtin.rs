@@ -16,7 +16,7 @@ pub fn type_cmd(args: &[String]) {
         println!("{} is a shell builtin", target);
     } else {
         // invalid_command: not found
-        eprintln!("{}: command not found", target);
+        eprintln!("{}: not found", target);
     }
 }
 
