@@ -62,7 +62,10 @@ pub fn repl() {
         if command.trim().is_empty() {
             continue; // skip to the next iteration of the loop
         }
-        // print command not found message
-        println!("{}: command not found", command.trim());
+        // match the command and execute the corresponding function
+        match command.trim() {
+            "exit" => crate::builtin::exit(0),
+            _ => println!("{}: command not found", command.trim()),
+        }
     }
 }
