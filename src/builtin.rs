@@ -1,6 +1,20 @@
+use std::collections::HashMap;
 
-pub const BUILTIN_COMMANDS: &[&str] = &["exit", "echo","type"];
+type BuiltinFn = fn(&[String]);
 
+pub fn get_dispatch_table() -> HashMap<&'static str, BuiltinFn> {
+    let mut map = HashMap::new();
+    map.insert("exit", exit as BuiltinFn);
+    map.insert("echo", echo as BuiltinFn);
+    map.insert("type", type_cmd as BuiltinFn);
+    map.insert("pwd", pwd as BuiltinFn);
+    map.insert("cd", cd as BuiltinFn);
+    map
+}
+
+pub fn is_builtin(name: &str) -> bool {
+    get_dispatch_table().contains_key(name)
+}
 
 pub fn exit(args: &[String]) {
     let code = args.first()
@@ -9,43 +23,36 @@ pub fn exit(args: &[String]) {
     std::process::exit(code);
 }
 
-
-pub fn type_cmd(args: &[String]) {
-    // get the target
-    let target = &args[0];
-
-    // Check if the command is a builtin command (like exit or echo). If it is, report it as a builtin (<command> is a shell builtin) and stop.
-    if is_builtin(&target) {
-
-        // {target} is a shell builtin
-        println!("{} is a shell builtin", target);
-    } 
-    /* condition two,
-
-    If the command is not a builtin, your shell must go through every directory in PATH. For each directory:
-    
-        Check if a file with the command name exists.
-        Check if the file has execute permissions.
-        If the file exists and has execute permissions, print <command> is <full_path> and stop.
-        If the file exists but lacks execute permissions, skip it and continue to the next directory.
-        */
-        else if let Some(path) = crate::helpers::find_executable(&target) {
-            println!("{} is {}", target, path);
-        } else {
-            // invalid_command: not found
-            // If no executable is found in any directory, print <command>: not found.
-            eprintln!("{}: not found", target);
-        }
-    }
-
-
 pub fn echo(args: &[String]) {
-    // args already has the command name stripped, so just join and print
     println!("{}", args.join(" "));
 }
 
-// is builtin function
-// param: name
-pub fn is_builtin(name: &str) -> bool {
-    BUILTIN_COMMANDS.contains(&name)
+pub fn type_cmd(args: &[String]) {
+    let target = &args[0];
+    if is_builtin(target) {
+        println!("{} is a shell builtin", target);
+    } else if let Some(path) = crate::helpers::find_executable(target) {
+        println!("{} is {}", target, path);
+    } else {
+        eprintln!("{}: not found", target);
+    }
+}
+
+pub fn pwd(_args: &[String]) {
+    match std::env::current_dir() {
+        Ok(path) => println!("{}", path.display()),
+        Err(e) => eprintln!("pwd: error: {}", e),
+    }
+}
+
+pub fn cd(args: &[String]) {
+    let target = args.first().map(|s| s.as_str()).unwrap_or("~");
+    let path = if target == "~" {
+        std::env::var("HOME").unwrap_or_else(|_| "/".to_string())
+    } else {
+        target.to_string()
+    };
+    if let Err(_) = std::env::set_current_dir(&path) {
+        eprintln!("cd: {}: No such file or directory", target);
+    }
 }
