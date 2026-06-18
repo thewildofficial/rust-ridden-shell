@@ -29,7 +29,7 @@ pub fn repl() {
             }
         // find command, if found execute, else print error
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
-            if let Err(e) = crate::executor::execute_command(&path, args) {
+            if let Err(e) = crate::executor::execute_command(&path, cmd, args) {
                 eprintln!("Error executing command: {}", e);
             }
         } else {

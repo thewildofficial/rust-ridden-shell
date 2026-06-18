@@ -1,4 +1,3 @@
-use std::{os::unix::fs::PermissionsExt};
 
 pub const BUILTIN_COMMANDS: &[&str] = &["exit", "echo","type"];
 
