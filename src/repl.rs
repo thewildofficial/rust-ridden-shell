@@ -19,13 +19,18 @@ pub fn repl() {
         
         let cmd = &parts[0];
         let args = &parts[1..];
-
+        // builtin command logic
         if crate::builtin::is_builtin(cmd) {
             match cmd.as_str() {
                 "exit" => crate::builtin::exit(args),
                 "echo" => crate::builtin::echo(args),
                 "type" => crate::builtin::type_cmd(args),
                 _ => unreachable!(),
+            }
+        // find command, if found execute, else print error
+        } else if let Some(path) = crate::helpers::find_executable(cmd) {
+            if let Err(e) = crate::executor::execute_command(&path, args) {
+                eprintln!("Error executing command: {}", e);
             }
         } else {
             println!("{}: command not found", trimmed);

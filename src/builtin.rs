@@ -2,6 +2,7 @@ use std::{os::unix::fs::PermissionsExt};
 
 pub const BUILTIN_COMMANDS: &[&str] = &["exit", "echo","type"];
 
+
 pub fn exit(args: &[String]) {
     let code = args.first()
         .and_then(|s| s.parse::<i32>().ok())
@@ -9,22 +10,6 @@ pub fn exit(args: &[String]) {
     std::process::exit(code);
 }
 
-// find_executable: search for the command in the directories listed in PATH.
-fn find_executable(target: &str) -> Option<String> {
-    for dir in std::env::var("PATH").unwrap_or_default().split(':') {
-        if dir.is_empty() {
-            continue;
-        }
-        let path = std::path::Path::new(dir).join(target);
-        // "If the file exists but lacks execute permissions, skip it and continue to the next directory.". this is an additional check we need to do
-        if let Ok(metadata) = std::fs::metadata(&path) {
-            if metadata.is_file() && metadata.permissions().mode() & 0o111 != 0 {
-                return Some(path.to_string_lossy().into_owned());
-            }
-        }
-    }
-    None
-}
 
 pub fn type_cmd(args: &[String]) {
     // get the target
@@ -45,7 +30,7 @@ pub fn type_cmd(args: &[String]) {
         If the file exists and has execute permissions, print <command> is <full_path> and stop.
         If the file exists but lacks execute permissions, skip it and continue to the next directory.
         */
-        else if let Some(path) = find_executable(&target) {
+        else if let Some(path) = crate::helpers::find_executable(&target) {
             println!("{} is {}", target, path);
         } else {
             // invalid_command: not found
