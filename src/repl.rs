@@ -1,24 +1,25 @@
 use std::io::Write;
 
 pub fn repl() {
-    let dispatch = crate::builtin::get_dispatch_table();
+    let dispatch: std::collections::HashMap<&str, crate::builtin::BuiltinFn> =
+        crate::builtin::get_dispatch_table();
 
     loop {
         print!("$ ");
         std::io::stdout().flush().unwrap();
 
-        let mut input = String::new();
+        let mut input: String = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
 
-        let trimmed = input.trim();
+        let trimmed: &str = input.trim();
         if trimmed.is_empty() {
             continue;
         }
 
-        let parts = crate::helpers::tokenize(trimmed);
+        let parts: Vec<String> = crate::helpers::tokenize(trimmed);
 
-        let cmd = &parts[0];
-        let args = &parts[1..];
+        let cmd: &String = &parts[0];
+        let args: &[String] = &parts[1..];
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
             func(args);

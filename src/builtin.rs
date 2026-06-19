@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
-type BuiltinFn = fn(&[String]);
+pub type BuiltinFn = fn(&[String]);
 
 pub fn get_dispatch_table() -> HashMap<&'static str, BuiltinFn> {
-    let mut map = HashMap::new();
+    let mut map: HashMap<&'static str, BuiltinFn> = HashMap::new();
     map.insert("exit", exit as BuiltinFn);
     map.insert("echo", echo as BuiltinFn);
     map.insert("type", type_cmd as BuiltinFn);
@@ -17,8 +17,8 @@ pub fn is_builtin(name: &str) -> bool {
 }
 
 pub fn exit(args: &[String]) {
-    let code = args.first()
-        .and_then(|s| s.parse::<i32>().ok())
+    let code: i32 = args.first()
+        .and_then(|s: &String| s.parse::<i32>().ok())
         .unwrap_or(0);
     std::process::exit(code);
 }
@@ -28,7 +28,7 @@ pub fn echo(args: &[String]) {
 }
 
 pub fn type_cmd(args: &[String]) {
-    let target = &args[0];
+    let target: &String = &args[0];
     if is_builtin(target) {
         println!("{} is a shell builtin", target);
     } else if let Some(path) = crate::helpers::find_executable(target) {
@@ -46,8 +46,8 @@ pub fn pwd(_args: &[String]) {
 }
 
 pub fn cd(args: &[String]) {
-    let target = args.first().map(|s| s.as_str()).unwrap_or("~");
-    let path = if target == "~" {
+    let target: &str = args.first().map(|s: &String| s.as_str()).unwrap_or("~");
+    let path: String = if target == "~" {
         std::env::var("HOME").unwrap_or_else(|_| "/".to_string())
     } else {
         target.to_string()

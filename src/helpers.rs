@@ -59,11 +59,12 @@ pub fn tokenize(input: &str) -> Vec<String> {
 }
 
 pub fn find_executable(target: &str) -> Option<String> {
-    for dir in std::env::var("PATH").unwrap_or_default().split(':') {
+    let path_var: String = std::env::var("PATH").unwrap_or_default();
+    for dir in path_var.split(':') {
         if dir.is_empty() {
             continue;
         }
-        let path = std::path::Path::new(dir).join(target);
+        let path: std::path::PathBuf = std::path::Path::new(dir).join(target);
         // "If the file exists but lacks execute permissions, skip it and continue to the next directory.". this is an additional check we need to do
         if let Ok(metadata) = std::fs::metadata(&path)
             && metadata.is_file()
