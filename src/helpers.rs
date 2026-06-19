@@ -1,36 +1,46 @@
 use std::os::unix::fs::PermissionsExt;
 
+#[derive(PartialEq)]
+enum ParseState {
+    Normal,
+    SingleQuote,
+    DoubleQuote,
+}
+
 pub fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
-    let mut in_single_quote = false;
-    let mut in_double_quote = false;
+    let mut state = ParseState::Normal;
     let mut chars = input.chars().peekable();
 
     while let Some(c) = chars.next() {
-        if in_single_quote {
-            if c == '\'' {
-                in_single_quote = false;
-            } else {
-                current.push(c);
-            }
-        } else if in_double_quote {
-            if c == '"' {
-                in_double_quote = false;
-            } else {
-                current.push(c);
-            }
-        } else {
-            match c {
-                '\'' => in_single_quote = true,
-                '"' => in_double_quote = true,
-                ' ' | '\t' => {
-                    if !current.is_empty() {
-                        tokens.push(current.clone());
-                        current.clear();
-                    }
+        match state {
+            ParseState::SingleQuote => {
+                if c == '\'' {
+                    state = ParseState::Normal;
+                } else {
+                    current.push(c);
                 }
-                _ => current.push(c),
+            }
+            ParseState::DoubleQuote => {
+                if c == '"' {
+                    state = ParseState::Normal;
+                } else {
+                    current.push(c);
+                }
+            }
+            ParseState::Normal => {
+                match c {
+                    '\'' => state = ParseState::SingleQuote,
+                    '"' => state = ParseState::DoubleQuote,
+                    ' ' | '\t' => {
+                        if !current.is_empty() {
+                            tokens.push(current.clone());
+                            current.clear();
+                        }
+                    }
+                    _ => current.push(c),
+                }
             }
         }
     }
