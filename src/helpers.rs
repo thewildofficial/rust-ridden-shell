@@ -58,17 +58,30 @@ pub fn tokenize(input: &str) -> Vec<String> {
                     '"' => state = ParseState::DoubleQuote,
                     '>' => {
                         // Check if current ends with a digit (for 1>, 2> etc.)
-                        let prefix: String = if current.ends_with(|c: char| c.is_ascii_digit()) {
-                            let digit: char = current.pop().unwrap();
-                            format!("{}{}", digit, '>')
+                        let digit: Option<char> = if current.ends_with(|c: char| c.is_ascii_digit()) {
+                            Some(current.pop().unwrap())
                         } else {
-                            ">".to_string()
+                            None
                         };
+
+                        // Peek ahead for >> (append mode)
+                        let is_append: bool = chars.peek() == Some(&'>');
+                        if is_append {
+                            chars.next(); // consume the second >
+                        }
+
+                        let op: String = match (digit, is_append) {
+                            (Some(d), true)  => format!("{}{}", d, ">>"),
+                            (Some(d), false) => format!("{}{}", d, ">"),
+                            (None, true)     => ">>".to_string(),
+                            (None, false)    => ">".to_string(),
+                        };
+
                         if !current.is_empty() {
                             tokens.push(current.clone());
                             current.clear();
                         }
-                        tokens.push(prefix);
+                        tokens.push(op);
                     }
                     ' ' | '\t' => {
                         if !current.is_empty() {
@@ -90,21 +103,34 @@ pub fn tokenize(input: &str) -> Vec<String> {
 }
 
 /// Parse tokens into (command_args, stdout_redirect, stderr_redirect).
-/// Scans for `>`, `1>`, and `2>` in the token list.
-pub fn parse_redirections(tokens: &[String]) -> (Vec<String>, Option<String>, Option<String>) {
-    let mut stdout_target: Option<String> = None;
-    let mut stderr_target: Option<String> = None;
+/// Each redirect is (target_filename, is_append).
+/// Scans for `>`, `1>`, `>>`, `1>>`, `2>`, `2>>` in the token list.
+pub fn parse_redirections(
+    tokens: &[String],
+) -> (Vec<String>, Option<(String, bool)>, Option<(String, bool)>) {
+    let mut stdout_target: Option<(String, bool)> = None;
+    let mut stderr_target: Option<(String, bool)> = None;
     let mut cmd_end: usize = tokens.len();
 
     for (i, token) in tokens.iter().enumerate() {
         if token == ">" || token == "1>" {
             cmd_end = i;
-            stdout_target = tokens.get(i + 1).cloned();
+            stdout_target = tokens.get(i + 1).cloned().map(|t| (t, false));
+            break;
+        }
+        if token == ">>" || token == "1>>" {
+            cmd_end = i;
+            stdout_target = tokens.get(i + 1).cloned().map(|t| (t, true));
             break;
         }
         if token == "2>" {
             cmd_end = i;
-            stderr_target = tokens.get(i + 1).cloned();
+            stderr_target = tokens.get(i + 1).cloned().map(|t| (t, false));
+            break;
+        }
+        if token == "2>>" {
+            cmd_end = i;
+            stderr_target = tokens.get(i + 1).cloned().map(|t| (t, true));
             break;
         }
     }
