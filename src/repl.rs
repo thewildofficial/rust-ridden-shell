@@ -17,8 +17,11 @@ pub fn repl() {
         }
 
         let tokens: Vec<String> = crate::helpers::tokenize(trimmed);
-        let (cmd_tokens, redirect_target): (Vec<String>, Option<String>) =
-            crate::helpers::parse_redirections(&tokens);
+        let (cmd_tokens, stdout_redirect, stderr_redirect): (
+            Vec<String>,
+            Option<String>,
+            Option<String>,
+        ) = crate::helpers::parse_redirections(&tokens);
 
         if cmd_tokens.is_empty() {
             continue;
@@ -26,12 +29,15 @@ pub fn repl() {
 
         let cmd: &String = &cmd_tokens[0];
         let args: &[String] = &cmd_tokens[1..];
-        let redirect: Option<&str> = redirect_target.as_deref();
+        let stdout_target: Option<&str> = stdout_redirect.as_deref();
+        let stderr_target: Option<&str> = stderr_redirect.as_deref();
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
-            crate::executor::execute_builtin(*func, args, redirect);
+            crate::executor::execute_builtin(*func, args, stdout_target, stderr_target);
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
-            if let Err(e) = crate::executor::execute_external(&path, cmd, args, redirect) {
+            if let Err(e) =
+                crate::executor::execute_external(&path, cmd, args, stdout_target, stderr_target)
+            {
                 eprintln!("Error executing command: {}", e);
             }
         } else {

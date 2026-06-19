@@ -89,19 +89,28 @@ pub fn tokenize(input: &str) -> Vec<String> {
     tokens
 }
 
-/// Parse tokens into (command_args, optional_redirect_target).
-/// Scans for `>` or `1>` in the token list. Everything before the redirect
-/// operator is the command. The token after is the redirect target filename.
-pub fn parse_redirections(tokens: &[String]) -> (Vec<String>, Option<String>) {
+/// Parse tokens into (command_args, stdout_redirect, stderr_redirect).
+/// Scans for `>`, `1>`, and `2>` in the token list.
+pub fn parse_redirections(tokens: &[String]) -> (Vec<String>, Option<String>, Option<String>) {
+    let mut stdout_target: Option<String> = None;
+    let mut stderr_target: Option<String> = None;
+    let mut cmd_end: usize = tokens.len();
+
     for (i, token) in tokens.iter().enumerate() {
         if token == ">" || token == "1>" {
-            let cmd_args: Vec<String> = tokens[..i].to_vec();
-            let target: Option<String> = tokens.get(i + 1).cloned();
-            return (cmd_args, target);
+            cmd_end = i;
+            stdout_target = tokens.get(i + 1).cloned();
+            break;
+        }
+        if token == "2>" {
+            cmd_end = i;
+            stderr_target = tokens.get(i + 1).cloned();
+            break;
         }
     }
-    // No redirection found
-    (tokens.to_vec(), None)
+
+    let cmd_args: Vec<String> = tokens[..cmd_end].to_vec();
+    (cmd_args, stdout_target, stderr_target)
 }
 
 pub fn find_executable(target: &str) -> Option<String> {
