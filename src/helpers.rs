@@ -5,16 +5,21 @@ enum ParseState {
     Normal,
     SingleQuote,
     DoubleQuote,
+    Backslash,
 }
 
 pub fn tokenize(input: &str) -> Vec<String> {
-    let mut tokens = Vec::new();
-    let mut current = String::new();
-    let mut state = ParseState::Normal;
-    let mut chars = input.chars().peekable();
+    let mut tokens: Vec<String> = Vec::new();
+    let mut current: String = String::new();
+    let mut state: ParseState = ParseState::Normal;
+    let mut chars: std::iter::Peekable<std::str::Chars<'_>> = input.chars().peekable();
 
     while let Some(c) = chars.next() {
         match state {
+            ParseState::Backslash => {
+                current.push(c);
+                state = ParseState::Normal;
+            }
             ParseState::SingleQuote => {
                 if c == '\'' {
                     state = ParseState::Normal;
@@ -31,6 +36,7 @@ pub fn tokenize(input: &str) -> Vec<String> {
             }
             ParseState::Normal => {
                 match c {
+                    '\\' => state = ParseState::Backslash,
                     '\'' => state = ParseState::SingleQuote,
                     '"' => state = ParseState::DoubleQuote,
                     ' ' | '\t' => {
