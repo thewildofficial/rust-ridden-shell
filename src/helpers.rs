@@ -56,6 +56,13 @@ pub fn tokenize(input: &str) -> Vec<String> {
                     '\\' => state = ParseState::BackslashNormal,
                     '\'' => state = ParseState::SingleQuote,
                     '"' => state = ParseState::DoubleQuote,
+                    '>' => {
+                        if !current.is_empty() {
+                            tokens.push(current.clone());
+                            current.clear();
+                        }
+                        tokens.push(">".to_string());
+                    }
                     ' ' | '\t' => {
                         if !current.is_empty() {
                             tokens.push(current.clone());
@@ -73,6 +80,21 @@ pub fn tokenize(input: &str) -> Vec<String> {
     }
 
     tokens
+}
+
+/// Parse tokens into (command_args, optional_redirect_target).
+/// Scans for `>` in the token list. Everything before `>` is the command.
+/// The token after `>` is the redirect target filename.
+pub fn parse_redirections(tokens: &[String]) -> (Vec<String>, Option<String>) {
+    for (i, token) in tokens.iter().enumerate() {
+        if token == ">" {
+            let cmd_args: Vec<String> = tokens[..i].to_vec();
+            let target: Option<String> = tokens.get(i + 1).cloned();
+            return (cmd_args, target);
+        }
+    }
+    // No redirection found
+    (tokens.to_vec(), None)
 }
 
 pub fn find_executable(target: &str) -> Option<String> {

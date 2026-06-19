@@ -16,15 +16,22 @@ pub fn repl() {
             continue;
         }
 
-        let parts: Vec<String> = crate::helpers::tokenize(trimmed);
+        let tokens: Vec<String> = crate::helpers::tokenize(trimmed);
+        let (cmd_tokens, redirect_target): (Vec<String>, Option<String>) =
+            crate::helpers::parse_redirections(&tokens);
 
-        let cmd: &String = &parts[0];
-        let args: &[String] = &parts[1..];
+        if cmd_tokens.is_empty() {
+            continue;
+        }
+
+        let cmd: &String = &cmd_tokens[0];
+        let args: &[String] = &cmd_tokens[1..];
+        let redirect: Option<&str> = redirect_target.as_deref();
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
-            func(args);
+            crate::executor::execute_builtin(*func, args, redirect);
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
-            if let Err(e) = crate::executor::execute_command(&path, cmd, args) {
+            if let Err(e) = crate::executor::execute_external(&path, cmd, args, redirect) {
                 eprintln!("Error executing command: {}", e);
             }
         } else {
