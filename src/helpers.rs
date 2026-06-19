@@ -1,11 +1,17 @@
 use std::os::unix::fs::PermissionsExt;
 
 #[derive(PartialEq)]
+enum BackslashOrigin {
+    Normal,
+    DoubleQuote,
+}
+
+#[derive(PartialEq)]
 enum ParseState {
     Normal,
     SingleQuote,
     DoubleQuote,
-    Backslash,
+    Backslash(BackslashOrigin),
 }
 
 pub fn tokenize(input: &str) -> Vec<String> {
@@ -16,9 +22,29 @@ pub fn tokenize(input: &str) -> Vec<String> {
 
     while let Some(c) = chars.next() {
         match state {
-            ParseState::Backslash => {
-                current.push(c);
-                state = ParseState::Normal;
+            ParseState::Backslash(origin) => {
+                match origin {
+                    BackslashOrigin::Normal => {
+                        // outside quotes: backslash escapes ANY next character
+                        current.push(c);
+                        state = ParseState::Normal;
+                    }
+                    BackslashOrigin::DoubleQuote => {
+                        // inside double quotes: backslash only escapes " and \
+                        match c {
+                            '"' | '\\' => {
+                                current.push(c);
+                                state = ParseState::DoubleQuote;
+                            }
+                            _ => {
+                                // backslash is literal, char is literal
+                                current.push('\\');
+                                current.push(c);
+                                state = ParseState::DoubleQuote;
+                            }
+                        }
+                    }
+                }
             }
             ParseState::SingleQuote => {
                 if c == '\'' {
@@ -28,15 +54,15 @@ pub fn tokenize(input: &str) -> Vec<String> {
                 }
             }
             ParseState::DoubleQuote => {
-                if c == '"' {
-                    state = ParseState::Normal;
-                } else {
-                    current.push(c);
+                match c {
+                    '"' => state = ParseState::Normal,
+                    '\\' => state = ParseState::Backslash(BackslashOrigin::DoubleQuote),
+                    _ => current.push(c),
                 }
             }
             ParseState::Normal => {
                 match c {
-                    '\\' => state = ParseState::Backslash,
+                    '\\' => state = ParseState::Backslash(BackslashOrigin::Normal),
                     '\'' => state = ParseState::SingleQuote,
                     '"' => state = ParseState::DoubleQuote,
                     ' ' | '\t' => {
