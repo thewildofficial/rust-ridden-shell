@@ -29,15 +29,21 @@ pub fn repl() {
 
         let cmd: &String = &cmd_tokens[0];
         let args: &[String] = &cmd_tokens[1..];
-        let stdout_target: Option<&str> = stdout_redirect.as_ref().map(|(t, _)| t.as_str());
-        let _stderr_target: Option<&str> = stderr_redirect.as_ref().map(|(t, _)| t.as_str());
+        let stdout_redirect_info: Option<(&str, bool)> =
+            stdout_redirect.as_ref().map(|(t, append)| (t.as_str(), *append));
+        let _stderr_redirect_info: Option<(&str, bool)> =
+            stderr_redirect.as_ref().map(|(t, append)| (t.as_str(), *append));
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
-            crate::executor::execute_builtin(*func, args, stdout_target);
+            crate::executor::execute_builtin(*func, args, stdout_redirect_info);
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
-            if let Err(e) =
-                crate::executor::execute_external(&path, cmd, args, stdout_target, _stderr_target)
-            {
+            if let Err(e) = crate::executor::execute_external(
+                &path,
+                cmd,
+                args,
+                stdout_redirect_info,
+                _stderr_redirect_info,
+            ) {
                 eprintln!("Error executing command: {}", e);
             }
         } else {
