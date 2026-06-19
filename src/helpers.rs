@@ -4,6 +4,7 @@ pub fn tokenize(input: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     let mut current = String::new();
     let mut in_single_quote = false;
+    let mut in_double_quote = false;
     let mut chars = input.chars().peekable();
 
     while let Some(c) = chars.next() {
@@ -13,9 +14,16 @@ pub fn tokenize(input: &str) -> Vec<String> {
             } else {
                 current.push(c);
             }
+        } else if in_double_quote {
+            if c == '"' {
+                in_double_quote = false;
+            } else {
+                current.push(c);
+            }
         } else {
             match c {
                 '\'' => in_single_quote = true,
+                '"' => in_double_quote = true,
                 ' ' | '\t' => {
                     if !current.is_empty() {
                         tokens.push(current.clone());
