@@ -31,18 +31,18 @@ pub fn repl() {
         let args: &[String] = &cmd_tokens[1..];
         let stdout_redirect_info: Option<(&str, bool)> =
             stdout_redirect.as_ref().map(|(t, append)| (t.as_str(), *append));
-        let _stderr_redirect_info: Option<(&str, bool)> =
+        let stderr_redirect_info: Option<(&str, bool)> =
             stderr_redirect.as_ref().map(|(t, append)| (t.as_str(), *append));
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
-            crate::executor::execute_builtin(*func, args, stdout_redirect_info);
+            crate::executor::execute_builtin(*func, args, stdout_redirect_info, stderr_redirect_info);
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
             if let Err(e) = crate::executor::execute_external(
                 &path,
                 cmd,
                 args,
                 stdout_redirect_info,
-                _stderr_redirect_info,
+                stderr_redirect_info,
             ) {
                 eprintln!("Error executing command: {}", e);
             }

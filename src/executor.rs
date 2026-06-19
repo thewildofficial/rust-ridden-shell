@@ -28,22 +28,37 @@ pub fn execute_external(
     Ok(())
 }
 
-/// Execute a builtin function, optionally redirecting stdout to a file.
-/// Uses a writer — either stdout or a File — so no unsafe needed.
+/// Execute a builtin function, optionally redirecting stdout/stderr to files.
+/// Uses writers — no unsafe needed.
 pub fn execute_builtin(
     func: crate::builtin::BuiltinFn,
     args: &[String],
     redirect_stdout: Option<(&str, bool)>,
+    redirect_stderr: Option<(&str, bool)>,
 ) {
-    match redirect_stdout {
-        Some((target, append)) => {
-            match open_redirect(target, append) {
-                Ok(mut file) => func(args, &mut file),
-                Err(e) => eprintln!("redirect: cannot open '{}': {}", target, e),
+    let mut stdout_writer: Box<dyn std::io::Write> = match redirect_stdout {
+        Some((target, append)) => match open_redirect(target, append) {
+            Ok(file) => Box::new(file),
+            Err(e) => {
+                eprintln!("redirect: cannot open '{}': {}", target, e);
+                Box::new(std::io::stdout())
             }
-        }
-        None => func(args, &mut std::io::stdout()),
-    }
+        },
+        None => Box::new(std::io::stdout()),
+    };
+
+    let mut stderr_writer: Box<dyn std::io::Write> = match redirect_stderr {
+        Some((target, append)) => match open_redirect(target, append) {
+            Ok(file) => Box::new(file),
+            Err(e) => {
+                eprintln!("redirect: cannot open '{}': {}", target, e);
+                Box::new(std::io::stderr())
+            }
+        },
+        None => Box::new(std::io::stderr()),
+    };
+
+    func(args, &mut *stdout_writer, &mut *stderr_writer);
 }
 
 fn open_redirect(target: &str, append: bool) -> Result<std::fs::File, std::io::Error> {
