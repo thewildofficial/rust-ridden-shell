@@ -1,17 +1,12 @@
 use std::os::unix::fs::PermissionsExt;
 
 #[derive(PartialEq)]
-enum BackslashOrigin {
-    Normal,
-    DoubleQuote,
-}
-
-#[derive(PartialEq)]
 enum ParseState {
     Normal,
     SingleQuote,
     DoubleQuote,
-    Backslash(BackslashOrigin),
+    BackslashNormal,
+    BackslashDoubleQuote,
 }
 
 pub fn tokenize(input: &str) -> Vec<String> {
@@ -22,27 +17,23 @@ pub fn tokenize(input: &str) -> Vec<String> {
 
     while let Some(c) = chars.next() {
         match state {
-            ParseState::Backslash(origin) => {
-                match origin {
-                    BackslashOrigin::Normal => {
-                        // outside quotes: backslash escapes ANY next character
+            ParseState::BackslashNormal => {
+                // outside quotes: backslash escapes ANY next character
+                current.push(c);
+                state = ParseState::Normal;
+            }
+            ParseState::BackslashDoubleQuote => {
+                // inside double quotes: backslash only escapes " and \
+                match c {
+                    '"' | '\\' => {
                         current.push(c);
-                        state = ParseState::Normal;
+                        state = ParseState::DoubleQuote;
                     }
-                    BackslashOrigin::DoubleQuote => {
-                        // inside double quotes: backslash only escapes " and \
-                        match c {
-                            '"' | '\\' => {
-                                current.push(c);
-                                state = ParseState::DoubleQuote;
-                            }
-                            _ => {
-                                // backslash is literal, char is literal
-                                current.push('\\');
-                                current.push(c);
-                                state = ParseState::DoubleQuote;
-                            }
-                        }
+                    _ => {
+                        // backslash is literal, char is literal
+                        current.push('\\');
+                        current.push(c);
+                        state = ParseState::DoubleQuote;
                     }
                 }
             }
@@ -56,13 +47,13 @@ pub fn tokenize(input: &str) -> Vec<String> {
             ParseState::DoubleQuote => {
                 match c {
                     '"' => state = ParseState::Normal,
-                    '\\' => state = ParseState::Backslash(BackslashOrigin::DoubleQuote),
+                    '\\' => state = ParseState::BackslashDoubleQuote,
                     _ => current.push(c),
                 }
             }
             ParseState::Normal => {
                 match c {
-                    '\\' => state = ParseState::Backslash(BackslashOrigin::Normal),
+                    '\\' => state = ParseState::BackslashNormal,
                     '\'' => state = ParseState::SingleQuote,
                     '"' => state = ParseState::DoubleQuote,
                     ' ' | '\t' => {
