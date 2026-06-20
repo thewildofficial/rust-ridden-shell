@@ -138,5 +138,24 @@ pub fn repl() {
         } else {
             println!("{}: command not found", trimmed);
         }
+
+        // Reap finished jobs after command execution (before next prompt)
+        let reaped_after: Vec<u32> = job_manager.reap_finished();
+        for id in &reaped_after {
+            if let Some(job) = job_manager.all_sorted().iter().find(|j| j.id == *id) {
+                let latest: Option<u32> = job_manager.latest_id();
+                let second_latest: Option<u32> = job_manager.second_latest_id();
+                let marker: &str = if Some(*id) == latest {
+                    "+"
+                } else if Some(*id) == second_latest {
+                    "-"
+                } else {
+                    " "
+                };
+                eprintln!("[{}]{}  Done                    {}", job.id, marker, job.command);
+            }
+        }
+        job_manager.remove_done();
+        job_manager.recycle_id();
     }
 }

@@ -63,23 +63,34 @@ impl JobManager {
                 if job.status == JobStatus::Running {
                     use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
                     let pid = nix::unistd::Pid::from_raw(job.pid as i32);
-                    match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
-                        Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => {
-                            if let Some(j) = self.jobs.get_mut(&id) {
-                                j.status = JobStatus::Done;
+                    let mut is_done: bool = false;
+                    // Try waitpid first, then /proc as fallback
+                    for _ in 0..3 {
+                        match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                            Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => {
+                                is_done = true;
+                                break;
                             }
-                            reaped.push(id);
-                        }
-                        Ok(WaitStatus::StillAlive) => {
-                            // Still running, do nothing
-                        }
-                        // Process doesn't exist or other error
-                        _ => {
-                            if let Some(j) = self.jobs.get_mut(&id) {
-                                j.status = JobStatus::Done;
+                            Ok(WaitStatus::StillAlive) => {
+                                // Check /proc as fallback
+                                if !std::path::Path::new(&format!("/proc/{}", job.pid)).exists() {
+                                    is_done = true;
+                                    break;
+                                }
                             }
-                            reaped.push(id);
+                            _ => {
+                                is_done = true;
+                                break;
+                            }
                         }
+                        // Brief yield to let OS schedule the process exit
+                        std::thread::sleep(std::time::Duration::from_millis(1));
+                    }
+                    if is_done {
+                        if let Some(j) = self.jobs.get_mut(&id) {
+                            j.status = JobStatus::Done;
+                        }
+                        reaped.push(id);
                     }
                 }
             }
