@@ -51,7 +51,7 @@ is it efficient? it's a shell. it forks and execs. the bottleneck is the OS, not
 
 is it safe? zero unsafe blocks. the borrow checker is my therapist.
 
-would i use it as my daily driver? absolutely not. but it got me an A.
+would i use it as my daily driver? absolutely not. but it should get me an A* (inshallah).
 
 ## license
 
