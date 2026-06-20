@@ -10,7 +10,16 @@ pub fn repl() {
         let reaped: Vec<u32> = job_manager.reap_finished();
         for id in &reaped {
             if let Some(job) = job_manager.all_sorted().iter().find(|j| j.id == *id) {
-                eprintln!("[{}]+  Done                    {}", job.id, job.command);
+                let latest: Option<u32> = job_manager.latest_id();
+                let second_latest: Option<u32> = job_manager.second_latest_id();
+                let marker: &str = if Some(*id) == latest {
+                    "+"
+                } else if Some(*id) == second_latest {
+                    "-"
+                } else {
+                    " "
+                };
+                eprintln!("[{}]{}  Done                    {}", job.id, marker, job.command);
             }
         }
 
@@ -54,18 +63,25 @@ pub fn repl() {
             if cmd == "jobs" {
                 // Special handling: jobs builtin with access to job_manager
                 let jobs: Vec<&crate::jobs::Job> = job_manager.all_sorted();
+                let latest: Option<u32> = job_manager.latest_id();
+                let second_latest: Option<u32> = job_manager.second_latest_id();
                 for job in &jobs {
                     let status_str: &str = match job.status {
                         crate::jobs::JobStatus::Running => "Running",
                         crate::jobs::JobStatus::Done => "Done",
                     };
-                    let is_latest: bool = job_manager.latest_id() == Some(job.id);
-                    let plus: &str = if is_latest { "+" } else { "" };
+                    let marker: &str = if Some(job.id) == latest {
+                        "+"
+                    } else if Some(job.id) == second_latest {
+                        "-"
+                    } else {
+                        " "
+                    };
                     writeln!(
                         std::io::stdout(),
-                        "[{}]{:<2} {:<24} {}",
+                        "[{}]{} {:<24} {}",
                         job.id,
-                        plus,
+                        marker,
                         status_str,
                         job.command
                     )

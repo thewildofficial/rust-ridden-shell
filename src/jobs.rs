@@ -77,6 +77,17 @@ impl JobManager {
         self.jobs.keys().max().copied()
     }
 
+    /// Get the second most recent job (second highest id).
+    pub fn second_latest_id(&self) -> Option<u32> {
+        let mut ids: Vec<&u32> = self.jobs.keys().collect();
+        ids.sort();
+        if ids.len() >= 2 {
+            Some(**ids.get(ids.len() - 2).unwrap())
+        } else {
+            None
+        }
+    }
+
     /// Remove a job by id.
     pub fn remove(&mut self, id: u32) {
         self.jobs.remove(&id);
