@@ -123,13 +123,11 @@ pub fn execute_pipeline(segments: &[&[String]]) {
                 }
                 let _ = c0.wait();
 
-                let output: String = String::from_utf8_lossy(&buf).to_string();
-                let piped_args: Vec<String> = output.lines().map(|s| s.to_string()).collect();
-
+                // Run the builtin with its own args (ignore piped data)
                 if let Some(func) = crate::builtin::get_dispatch_table().get(cmd1) {
                     let mut stdout_writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
                     let mut stderr_writer: Box<dyn std::io::Write> = Box::new(std::io::stderr());
-                    func(&piped_args, &mut *stdout_writer, &mut *stderr_writer);
+                    func(args1, &mut *stdout_writer, &mut *stderr_writer);
                 }
             }
             return;
