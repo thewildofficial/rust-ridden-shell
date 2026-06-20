@@ -28,6 +28,43 @@ pub fn execute_external(
     Ok(())
 }
 
+/// Execute an external command in the background.
+/// Spawns the process, prints [job_id] pid, and returns immediately.
+pub fn execute_background(
+    path: &str,
+    cmd_name: &str,
+    args: &[String],
+    redirect_stdout: Option<(&str, bool)>,
+    redirect_stderr: Option<(&str, bool)>,
+    job_id: u32,
+) {
+    let mut cmd: std::process::Command = std::process::Command::new(path);
+    cmd.arg0(cmd_name);
+    cmd.args(args);
+
+    if let Some((target, append)) = redirect_stdout {
+        if let Ok(file) = open_redirect(target, append) {
+            cmd.stdout(std::process::Stdio::from(file));
+        }
+    }
+
+    if let Some((target, append)) = redirect_stderr {
+        if let Ok(file) = open_redirect(target, append) {
+            cmd.stderr(std::process::Stdio::from(file));
+        }
+    }
+
+    match cmd.spawn() {
+        Ok(child) => {
+            println!("[{}] {}", job_id, child.id());
+            // Don't wait — that's the whole point of background
+        }
+        Err(e) => {
+            eprintln!("Error starting background job: {}", e);
+        }
+    }
+}
+
 /// Execute a builtin function, optionally redirecting stdout/stderr to files.
 /// Uses writers — no unsafe needed.
 pub fn execute_builtin(
