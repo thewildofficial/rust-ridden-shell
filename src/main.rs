@@ -4,6 +4,7 @@ mod builtin;
 mod helpers;
 mod repl;
 mod executor;
+mod jobs;
 fn main() {
     repl::repl();
 }

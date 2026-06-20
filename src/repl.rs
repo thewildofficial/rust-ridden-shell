@@ -3,9 +3,17 @@ use std::io::Write;
 pub fn repl() {
     let dispatch: std::collections::HashMap<&str, crate::builtin::BuiltinFn> =
         crate::builtin::get_dispatch_table();
-    let mut next_job_id: u32 = 1;
+    let mut job_manager: crate::jobs::JobManager = crate::jobs::JobManager::new();
 
     loop {
+        // Reap finished jobs before showing prompt
+        let reaped: Vec<u32> = job_manager.reap_finished();
+        for id in &reaped {
+            if let Some(job) = job_manager.all_sorted().iter().find(|j| j.id == *id) {
+                eprintln!("[{}]+  Done                    {}", job.id, job.command);
+            }
+        }
+
         print!("$ ");
         std::io::stdout().flush().unwrap();
 
@@ -43,12 +51,40 @@ pub fn repl() {
             stderr_redirect.as_ref().map(|(t, append)| (t.as_str(), *append));
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
-            crate::executor::execute_builtin(*func, args, stdout_redirect_info, stderr_redirect_info);
+            if cmd == "jobs" {
+                // Special handling: jobs builtin with access to job_manager
+                let jobs: Vec<&crate::jobs::Job> = job_manager.all_sorted();
+                for job in &jobs {
+                    let status_str: &str = match job.status {
+                        crate::jobs::JobStatus::Running => "Running",
+                        crate::jobs::JobStatus::Done => "Done",
+                    };
+                    let is_latest: bool = job_manager.latest_id() == Some(job.id);
+                    let plus: &str = if is_latest { "+" } else { "" };
+                    writeln!(
+                        std::io::stdout(),
+                        "[{}]{:<2} {:<24} {}",
+                        job.id,
+                        plus,
+                        status_str,
+                        job.command
+                    )
+                    .unwrap();
+                }
+            } else {
+                crate::executor::execute_builtin(*func, args, stdout_redirect_info, stderr_redirect_info);
+            }
         } else if let Some(path) = crate::helpers::find_executable(cmd) {
             if is_background {
-                let job_id: u32 = next_job_id;
-                next_job_id += 1;
-                crate::executor::execute_background(&path, cmd, args, stdout_redirect_info, stderr_redirect_info, job_id);
+                let pid: u32 = crate::executor::execute_background(
+                    &path,
+                    cmd,
+                    args,
+                    stdout_redirect_info,
+                    stderr_redirect_info,
+                );
+                let job_id: u32 = job_manager.add(pid, trimmed.to_string());
+                println!("[{}] {}", job_id, pid);
             } else if let Err(e) = crate::executor::execute_external(
                 &path,
                 cmd,

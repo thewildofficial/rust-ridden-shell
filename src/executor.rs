@@ -30,14 +30,14 @@ pub fn execute_external(
 
 /// Execute an external command in the background.
 /// Spawns the process, prints [job_id] pid, and returns immediately.
+/// Returns the PID of the spawned process.
 pub fn execute_background(
     path: &str,
     cmd_name: &str,
     args: &[String],
     redirect_stdout: Option<(&str, bool)>,
     redirect_stderr: Option<(&str, bool)>,
-    job_id: u32,
-) {
+) -> u32 {
     let mut cmd: std::process::Command = std::process::Command::new(path);
     cmd.arg0(cmd_name);
     cmd.args(args);
@@ -56,11 +56,11 @@ pub fn execute_background(
 
     match cmd.spawn() {
         Ok(child) => {
-            println!("[{}] {}", job_id, child.id());
-            // Don't wait — that's the whole point of background
+            child.id()
         }
         Err(e) => {
             eprintln!("Error starting background job: {}", e);
+            0
         }
     }
 }
