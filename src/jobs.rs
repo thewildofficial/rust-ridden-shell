@@ -29,8 +29,14 @@ impl JobManager {
     }
 
     pub fn add(&mut self, pid: u32, command: String) -> u32 {
-        let id = self.next_id;
-        self.next_id += 1;
+        // Find the lowest available job ID (recycle freed numbers)
+        let id: u32 = (1..=self.next_id)
+            .find(|i| !self.jobs.contains_key(i))
+            .unwrap_or_else(|| {
+                let new_id: u32 = self.next_id;
+                self.next_id += 1;
+                new_id
+            });
         self.jobs.insert(
             id,
             Job {
@@ -40,6 +46,10 @@ impl JobManager {
                 status: JobStatus::Running,
             },
         );
+        // Advance next_id past all currently used IDs
+        while self.jobs.contains_key(&self.next_id) {
+            self.next_id += 1;
+        }
         id
     }
 
