@@ -43,7 +43,7 @@ impl JobManager {
         id
     }
 
-    /// Check if any jobs have finished (non-blocking).
+    /// Check if any jobs have finished (non-blocking) using waitpid WNOHANG.
     /// Returns the ids of jobs that changed status.
     pub fn reap_finished(&mut self) -> Vec<u32> {
         let mut reaped: Vec<u32> = Vec::new();
@@ -51,12 +51,25 @@ impl JobManager {
         for id in ids {
             if let Some(job) = self.jobs.get(&id) {
                 if job.status == JobStatus::Running {
-                    let alive: bool = std::path::Path::new(&format!("/proc/{}", job.pid)).exists();
-                    if !alive {
-                        if let Some(j) = self.jobs.get_mut(&id) {
-                            j.status = JobStatus::Done;
+                    use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
+                    let pid = nix::unistd::Pid::from_raw(job.pid as i32);
+                    match waitpid(pid, Some(WaitPidFlag::WNOHANG)) {
+                        Ok(WaitStatus::Exited(_, _)) | Ok(WaitStatus::Signaled(_, _, _)) => {
+                            if let Some(j) = self.jobs.get_mut(&id) {
+                                j.status = JobStatus::Done;
+                            }
+                            reaped.push(id);
                         }
-                        reaped.push(id);
+                        Ok(WaitStatus::StillAlive) => {
+                            // Still running, do nothing
+                        }
+                        // Process doesn't exist or other error
+                        _ => {
+                            if let Some(j) = self.jobs.get_mut(&id) {
+                                j.status = JobStatus::Done;
+                            }
+                            reaped.push(id);
+                        }
                     }
                 }
             }
