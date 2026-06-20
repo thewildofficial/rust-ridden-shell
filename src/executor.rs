@@ -1,6 +1,6 @@
+use std::io::{Read, Write};
 use std::os::unix::process::CommandExt;
 use std::process::{Command, Stdio};
-use std::io::{Read, Write};
 
 /// Execute a pipeline of commands connected by pipes.
 pub fn execute_pipeline(segments: &[&[String]]) {
@@ -20,21 +20,27 @@ pub fn execute_pipeline(segments: &[&[String]]) {
         let is_ext0: bool = crate::helpers::find_executable(cmd0).is_some();
         let is_ext1: bool = crate::helpers::find_executable(cmd1).is_some();
 
-        // external | external
+        // external | external — use real OS pipe
         if is_ext0 && is_ext1 {
             let path0: String = crate::helpers::find_executable(cmd0).unwrap();
             let path1: String = crate::helpers::find_executable(cmd1).unwrap();
 
+            // Create a real OS pipe
+            let (reader, writer) = match os_pipe::pipe() {
+                Ok(p) => p,
+                Err(e) => { eprintln!("pipe error: {}", e); return; }
+            };
+
             let mut child0: Command = Command::new(&path0);
             child0.arg0(cmd0);
             child0.args(args0);
-            child0.stdout(Stdio::piped());
+            child0.stdout(Stdio::from(writer));
             child0.stderr(Stdio::inherit());
 
             let mut child1: Command = Command::new(&path1);
             child1.arg0(cmd1);
             child1.args(args1);
-            child1.stdin(Stdio::piped());
+            child1.stdin(Stdio::from(reader));
             child1.stdout(Stdio::inherit());
             child1.stderr(Stdio::inherit());
 
@@ -47,17 +53,8 @@ pub fn execute_pipeline(segments: &[&[String]]) {
                 Err(e) => { eprintln!("pipeline error: {}", e); return; }
             };
 
-            // Read all of c0's output
-            let mut buf: Vec<u8> = Vec::new();
-            if let Some(mut stdout) = c0.stdout.take() {
-                let _ = stdout.read_to_end(&mut buf);
-            }
+            // Wait for both — c1 will finish when c0's pipe closes
             let _ = c0.wait();
-
-            // Write to c1's stdin
-            if let Some(mut stdin) = c1.stdin.take() {
-                let _ = stdin.write_all(&buf);
-            }
             let _ = c1.wait();
             return;
         }
@@ -125,8 +122,9 @@ pub fn execute_pipeline(segments: &[&[String]]) {
             .all(|s| crate::helpers::find_executable(&s[0]).is_some());
 
         if all_external {
-            // Chain: run each command, pipe output to next
-            let mut prev_output: Vec<u8> = Vec::new();
+            // Chain: create pipes between each pair of commands
+            let mut children: Vec<std::process::Child> = Vec::new();
+            let mut prev_read: Option<os_pipe::PipeReader> = None;
 
             for (i, segment) in segments.iter().enumerate() {
                 let cmd_name: &str = &segment[0];
@@ -137,43 +135,46 @@ pub fn execute_pipeline(segments: &[&[String]]) {
                 cmd.arg0(cmd_name);
                 cmd.args(args);
 
-                if i == 0 {
-                    // First command: stdin from shell, stdout piped
-                    cmd.stdout(Stdio::piped());
-                } else if i == n - 1 {
-                    // Last command: stdin from prev output, stdout to shell
-                    cmd.stdin(Stdio::piped());
-                    cmd.stdout(Stdio::inherit());
-                } else {
-                    // Middle command: stdin from prev output, stdout piped
-                    cmd.stdin(Stdio::piped());
-                    cmd.stdout(Stdio::piped());
-                }
-                cmd.stderr(Stdio::inherit());
+                // Create pipe for this command's output (except last)
+                if i < n - 1 {
+                    let (reader, writer) = match os_pipe::pipe() {
+                        Ok(p) => p,
+                        Err(e) => { eprintln!("pipe error: {}", e); return; }
+                    };
 
-                if i == 0 {
-                    // First command: spawn and read output
-                    if let Ok(mut child) = cmd.spawn() {
-                        if let Some(mut stdout) = child.stdout.take() {
-                            let _ = stdout.read_to_end(&mut prev_output);
+                    // Set stdin from previous pipe
+                    if let Some(ref prev) = prev_read {
+                        cmd.stdin(Stdio::from(prev.try_clone().unwrap()));
+                    }
+
+                    cmd.stdout(Stdio::from(writer));
+                    cmd.stderr(Stdio::inherit());
+
+                    match cmd.spawn() {
+                        Ok(c) => {
+                            children.push(c);
+                            prev_read = Some(reader);
                         }
-                        let _ = child.wait();
+                        Err(e) => { eprintln!("pipeline error: {}", e); return; }
                     }
                 } else {
-                    // Subsequent commands: feed prev_output as stdin
-                    if let Ok(mut child) = cmd.spawn() {
-                        if let Some(mut stdin) = child.stdin.take() {
-                            let _ = stdin.write_all(&prev_output);
-                        }
-                        prev_output.clear();
-                        if i < n - 1 {
-                            if let Some(mut stdout) = child.stdout.take() {
-                                let _ = stdout.read_to_end(&mut prev_output);
-                            }
-                        }
-                        let _ = child.wait();
+                    // Last command
+                    if let Some(ref prev) = prev_read {
+                        cmd.stdin(Stdio::from(prev.try_clone().unwrap()));
+                    }
+                    cmd.stdout(Stdio::inherit());
+                    cmd.stderr(Stdio::inherit());
+
+                    match cmd.spawn() {
+                        Ok(c) => children.push(c),
+                        Err(e) => { eprintln!("pipeline error: {}", e); return; }
                     }
                 }
+            }
+
+            // Wait for all children
+            for mut c in children {
+                let _ = c.wait();
             }
             return;
         }
