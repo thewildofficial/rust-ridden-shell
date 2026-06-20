@@ -10,6 +10,7 @@ pub fn get_dispatch_table() -> HashMap<&'static str, BuiltinFn> {
     map.insert("type", type_cmd as BuiltinFn);
     map.insert("pwd", pwd as BuiltinFn);
     map.insert("cd", cd as BuiltinFn);
+    map.insert("jobs", jobs as BuiltinFn);
     map
 }
 
@@ -56,4 +57,8 @@ pub fn cd(args: &[String], _w: &mut dyn Write, err: &mut dyn Write) {
     if let Err(_) = std::env::set_current_dir(&path) {
         writeln!(err, "cd: {}: No such file or directory", target).unwrap();
     }
+}
+
+pub fn jobs(_args: &[String], _w: &mut dyn Write, _err: &mut dyn Write) {
+    // Empty implementation — will be filled in later stages
 }
