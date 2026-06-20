@@ -85,6 +85,8 @@ pub fn repl() {
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
             if cmd == "jobs" {
+                // Reap finished jobs before listing
+                job_manager.reap_finished();
                 let jobs: Vec<&crate::jobs::Job> = job_manager.all_sorted();
                 let latest: Option<u32> = job_manager.latest_id();
                 let second_latest: Option<u32> = job_manager.second_latest_id();
@@ -102,7 +104,7 @@ pub fn repl() {
                     };
                     writeln!(
                         std::io::stdout(),
-                        "[{}]{} {:<24} {}",
+                        "[{}]{}  {:<24} {}",
                         job.id,
                         marker,
                         status_str,
@@ -122,7 +124,7 @@ pub fn repl() {
                     stdout_redirect_info,
                     stderr_redirect_info,
                 );
-                let job_id: u32 = job_manager.add(pid, trimmed.to_string());
+                let job_id: u32 = job_manager.add(pid, cmd_tokens.join(" "));
                 println!("[{}] {}", job_id, pid);
             } else if let Err(e) = crate::executor::execute_external(
                 &path,
