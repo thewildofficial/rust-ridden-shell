@@ -51,7 +51,6 @@ impl JobManager {
         for id in ids {
             if let Some(job) = self.jobs.get(&id) {
                 if job.status == JobStatus::Running {
-                    // Check if process still exists via /proc
                     let alive: bool = std::path::Path::new(&format!("/proc/{}", job.pid)).exists();
                     if !alive {
                         if let Some(j) = self.jobs.get_mut(&id) {
@@ -96,5 +95,17 @@ impl JobManager {
     /// Remove all done jobs.
     pub fn remove_done(&mut self) {
         self.jobs.retain(|_, j| j.status == JobStatus::Running);
+    }
+
+    /// Check if there are no jobs.
+    pub fn is_empty(&self) -> bool {
+        self.jobs.is_empty()
+    }
+
+    /// Reset next_id to 1 if no jobs exist (recycle job numbers).
+    pub fn recycle_id(&mut self) {
+        if self.jobs.is_empty() {
+            self.next_id = 1;
+        }
     }
 }

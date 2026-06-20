@@ -1,7 +1,206 @@
 use std::os::unix::process::CommandExt;
+use std::process::{Command, Stdio};
+use std::io::{Read, Write};
+
+/// Execute a pipeline of commands connected by pipes.
+pub fn execute_pipeline(segments: &[&[String]]) {
+    if segments.is_empty() {
+        return;
+    }
+
+    let n: usize = segments.len();
+
+    // For dual-command pipelines
+    if n == 2 {
+        let cmd0: &str = &segments[0][0];
+        let cmd1: &str = &segments[1][0];
+        let args0: &[String] = &segments[0][1..];
+        let args1: &[String] = &segments[1][1..];
+
+        let is_ext0: bool = crate::helpers::find_executable(cmd0).is_some();
+        let is_ext1: bool = crate::helpers::find_executable(cmd1).is_some();
+
+        // external | external
+        if is_ext0 && is_ext1 {
+            let path0: String = crate::helpers::find_executable(cmd0).unwrap();
+            let path1: String = crate::helpers::find_executable(cmd1).unwrap();
+
+            let mut child0: Command = Command::new(&path0);
+            child0.arg0(cmd0);
+            child0.args(args0);
+            child0.stdout(Stdio::piped());
+            child0.stderr(Stdio::inherit());
+
+            let mut child1: Command = Command::new(&path1);
+            child1.arg0(cmd1);
+            child1.args(args1);
+            child1.stdin(Stdio::piped());
+            child1.stdout(Stdio::inherit());
+            child1.stderr(Stdio::inherit());
+
+            let mut c0: std::process::Child = match child0.spawn() {
+                Ok(c) => c,
+                Err(e) => { eprintln!("pipeline error: {}", e); return; }
+            };
+            let mut c1: std::process::Child = match child1.spawn() {
+                Ok(c) => c,
+                Err(e) => { eprintln!("pipeline error: {}", e); return; }
+            };
+
+            // Read all of c0's output
+            let mut buf: Vec<u8> = Vec::new();
+            if let Some(mut stdout) = c0.stdout.take() {
+                let _ = stdout.read_to_end(&mut buf);
+            }
+            let _ = c0.wait();
+
+            // Write to c1's stdin
+            if let Some(mut stdin) = c1.stdin.take() {
+                let _ = stdin.write_all(&buf);
+            }
+            let _ = c1.wait();
+            return;
+        }
+
+        // builtin | external
+        if crate::builtin::is_builtin(cmd0) && is_ext1 {
+            let path1: String = crate::helpers::find_executable(cmd1).unwrap();
+
+            let mut buf: Vec<u8> = Vec::new();
+            if let Some(func) = crate::builtin::get_dispatch_table().get(cmd0) {
+                let mut stderr_writer: Box<dyn std::io::Write> = Box::new(std::io::stderr());
+                func(args0, &mut buf, &mut *stderr_writer);
+            }
+
+            let mut child1: Command = Command::new(&path1);
+            child1.arg0(cmd1);
+            child1.args(args1);
+            child1.stdin(Stdio::piped());
+            child1.stdout(Stdio::inherit());
+            child1.stderr(Stdio::inherit());
+
+            if let Ok(mut c1) = child1.spawn() {
+                if let Some(mut stdin) = c1.stdin.take() {
+                    let _ = stdin.write_all(&buf);
+                }
+                let _ = c1.wait();
+            }
+            return;
+        }
+
+        // external | builtin
+        if is_ext0 && crate::builtin::is_builtin(cmd1) {
+            let path0: String = crate::helpers::find_executable(cmd0).unwrap();
+
+            let mut child0: Command = Command::new(&path0);
+            child0.arg0(cmd0);
+            child0.args(args0);
+            child0.stdout(Stdio::piped());
+            child0.stderr(Stdio::inherit());
+
+            if let Ok(mut c0) = child0.spawn() {
+                let mut buf: Vec<u8> = Vec::new();
+                if let Some(mut stdout) = c0.stdout.take() {
+                    let _ = stdout.read_to_end(&mut buf);
+                }
+                let _ = c0.wait();
+
+                let output: String = String::from_utf8_lossy(&buf).to_string();
+                let piped_args: Vec<String> = output.lines().map(|s| s.to_string()).collect();
+
+                if let Some(func) = crate::builtin::get_dispatch_table().get(cmd1) {
+                    let mut stdout_writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
+                    let mut stderr_writer: Box<dyn std::io::Write> = Box::new(std::io::stderr());
+                    func(&piped_args, &mut *stdout_writer, &mut *stderr_writer);
+                }
+            }
+            return;
+        }
+    }
+
+    // Multi-command pipeline (3+ commands) — all external
+    if n >= 3 {
+        let all_external: bool = segments
+            .iter()
+            .all(|s| crate::helpers::find_executable(&s[0]).is_some());
+
+        if all_external {
+            // Chain: run each command, pipe output to next
+            let mut prev_output: Vec<u8> = Vec::new();
+
+            for (i, segment) in segments.iter().enumerate() {
+                let cmd_name: &str = &segment[0];
+                let args: &[String] = &segment[1..];
+                let path: String = crate::helpers::find_executable(cmd_name).unwrap();
+
+                let mut cmd: Command = Command::new(&path);
+                cmd.arg0(cmd_name);
+                cmd.args(args);
+
+                if i == 0 {
+                    // First command: stdin from shell, stdout piped
+                    cmd.stdout(Stdio::piped());
+                } else if i == n - 1 {
+                    // Last command: stdin from prev output, stdout to shell
+                    cmd.stdin(Stdio::piped());
+                    cmd.stdout(Stdio::inherit());
+                } else {
+                    // Middle command: stdin from prev output, stdout piped
+                    cmd.stdin(Stdio::piped());
+                    cmd.stdout(Stdio::piped());
+                }
+                cmd.stderr(Stdio::inherit());
+
+                if i == 0 {
+                    // First command: spawn and read output
+                    if let Ok(mut child) = cmd.spawn() {
+                        if let Some(mut stdout) = child.stdout.take() {
+                            let _ = stdout.read_to_end(&mut prev_output);
+                        }
+                        let _ = child.wait();
+                    }
+                } else {
+                    // Subsequent commands: feed prev_output as stdin
+                    if let Ok(mut child) = cmd.spawn() {
+                        if let Some(mut stdin) = child.stdin.take() {
+                            let _ = stdin.write_all(&prev_output);
+                        }
+                        prev_output.clear();
+                        if i < n - 1 {
+                            if let Some(mut stdout) = child.stdout.take() {
+                                let _ = stdout.read_to_end(&mut prev_output);
+                            }
+                        }
+                        let _ = child.wait();
+                    }
+                }
+            }
+            return;
+        }
+    }
+
+    // Fallback: run the last command
+    let last: &[String] = segments[n - 1];
+    let cmd_name: &str = &last[0];
+    let args: &[String] = &last[1..];
+
+    if let Some(func) = crate::builtin::get_dispatch_table().get(cmd_name) {
+        let mut stdout_writer: Box<dyn std::io::Write> = Box::new(std::io::stdout());
+        let mut stderr_writer: Box<dyn std::io::Write> = Box::new(std::io::stderr());
+        func(args, &mut *stdout_writer, &mut *stderr_writer);
+    } else if let Some(path) = crate::helpers::find_executable(cmd_name) {
+        let mut cmd: Command = Command::new(&path);
+        cmd.arg0(cmd_name);
+        cmd.args(args);
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
+        if let Ok(mut child) = cmd.spawn() {
+            let _ = child.wait();
+        }
+    }
+}
 
 /// Execute an external command, optionally redirecting stdout/stderr to files.
-/// Each redirect is (target_filename, is_append).
 pub fn execute_external(
     path: &str,
     cmd_name: &str,
@@ -28,9 +227,7 @@ pub fn execute_external(
     Ok(())
 }
 
-/// Execute an external command in the background.
-/// Spawns the process, prints [job_id] pid, and returns immediately.
-/// Returns the PID of the spawned process.
+/// Execute an external command in the background. Returns the PID.
 pub fn execute_background(
     path: &str,
     cmd_name: &str,
@@ -55,9 +252,7 @@ pub fn execute_background(
     }
 
     match cmd.spawn() {
-        Ok(child) => {
-            child.id()
-        }
+        Ok(child) => child.id(),
         Err(e) => {
             eprintln!("Error starting background job: {}", e);
             0
@@ -66,7 +261,6 @@ pub fn execute_background(
 }
 
 /// Execute a builtin function, optionally redirecting stdout/stderr to files.
-/// Uses writers — no unsafe needed.
 pub fn execute_builtin(
     func: crate::builtin::BuiltinFn,
     args: &[String],

@@ -22,6 +22,10 @@ pub fn repl() {
                 eprintln!("[{}]{}  Done                    {}", job.id, marker, job.command);
             }
         }
+        // Remove done jobs from the manager
+        job_manager.remove_done();
+        // Recycle job numbers if no jobs remain
+        job_manager.recycle_id();
 
         print!("$ ");
         std::io::stdout().flush().unwrap();
@@ -40,6 +44,26 @@ pub fn repl() {
         let is_background: bool = tokens.last().map(|t| t == "&").unwrap_or(false);
         if is_background {
             tokens.pop();
+        }
+
+        // Check for pipe operator |
+        let pipe_positions: Vec<usize> = tokens.iter().enumerate()
+            .filter(|(_, t)| *t == "|")
+            .map(|(i, _)| i)
+            .collect();
+
+        if !pipe_positions.is_empty() {
+            // Handle pipeline: split tokens at each | and execute
+            let mut segments: Vec<&[String]> = Vec::new();
+            let mut start: usize = 0;
+            for &pos in &pipe_positions {
+                segments.push(&tokens[start..pos]);
+                start = pos + 1;
+            }
+            segments.push(&tokens[start..]);
+
+            crate::executor::execute_pipeline(&segments);
+            continue;
         }
 
         let (cmd_tokens, stdout_redirect, stderr_redirect): (
@@ -61,7 +85,6 @@ pub fn repl() {
 
         if let Some(func) = dispatch.get(cmd.as_str()) {
             if cmd == "jobs" {
-                // Special handling: jobs builtin with access to job_manager
                 let jobs: Vec<&crate::jobs::Job> = job_manager.all_sorted();
                 let latest: Option<u32> = job_manager.latest_id();
                 let second_latest: Option<u32> = job_manager.second_latest_id();
